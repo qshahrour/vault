@@ -1,0 +1,131 @@
+{
+  "branches": [
+    "main",
+    "master"
+  ],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          {
+            "type": "docs",
+            "release": false
+          },
+          {
+            "type": "refactor",
+            "release": "patch"
+          },
+          {
+            "type": "test",
+            "release": false
+          },
+          {
+            "type": "chore",
+            "release": false
+          }
+        ],
+        "parserOpts": {
+          "noteKeywords": [
+            "BREAKING CHANGE",
+            "BREAKING CHANGES",
+            "BREAKING"
+          ]
+        }
+      },
+    ],
+    [
+       "@google/semantic-release-replace-plugin",
+      {
+        "replacements": [
+          {
+            "files": ["main.go"],
+            "from": "VaultbotVersion.*= \".*\"",
+            "to": "VaultbotVersion = \"${nextRelease.version}\"",
+            "results": [
+              {
+                "file": "main.go",
+                "hasChanged": true,
+                "numMatches": 1,
+                "numReplacements": 1
+              }
+            ],
+            "countMatches": true
+          }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "parserOpts": {
+          "noteKeywords": [
+            "BREAKING CHANGE",
+            "BREAKING CHANGES",
+            "BREAKING"
+          ]
+        },
+        "presetConfig": {
+          "types": [
+            {
+              "type": "fix",
+              "section": "Bug Fixes",
+              "hidden": false
+            },
+            {
+              "type": "feat",
+              "section": "Features",
+              "hidden": false
+            },
+            {
+              "type": "refactor",
+              "section": "Refactor",
+              "hidden": false
+            },
+            {
+              "type": "test",
+              "hidden": true
+            },
+            {
+              "type": "chore",
+              "hidden": true
+            },
+            {
+              "type": "docs",
+              "hidden": true
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md"
+      }
+    ],
+    [
+      "@semantic-release/gitlab",
+      {
+        "assets": [
+          {
+            "path": "CHANGELOG.md"
+          }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "message": "chore(release): ${nextRelease.version} \n\n${nextRelease.notes}",
+        "assets": [
+          "CHANGELOG.md",
+          "main.go"
+        ]
+      }
+    ]
+  ]
+}

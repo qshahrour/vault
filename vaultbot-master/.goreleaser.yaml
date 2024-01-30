@@ -1,0 +1,83 @@
+project_name: vaultbot
+builds:
+  - env: [CGO_ENABLED=0]
+    binary: vaultbot
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+dockers:
+- image_templates: 
+  - "msvechla/vaultbot:{{ .Version }}-amd64"
+  dockerfile: Dockerfile
+  use: buildx
+  build_flag_templates:
+  - "--platform=linux/amd64"
+- image_templates: 
+  - "msvechla/vaultbot:{{ .Version }}-arm64"
+  dockerfile: Dockerfile
+  use: buildx
+  build_flag_templates:
+  - "--platform=linux/arm64"
+docker_manifests:
+- name_template: msvechla/vaultbot:{{ .Version }}
+  image_templates:
+  - "msvechla/vaultbot:{{ .Version }}-amd64"
+  - "msvechla/vaultbot:{{ .Version }}-arm64"
+- name_template: msvechla/vaultbot:{{ .Major }}
+  image_templates:
+  - "msvechla/vaultbot:{{ .Version }}-amd64"
+  - "msvechla/vaultbot:{{ .Version }}-arm64"
+- name_template: msvechla/vaultbot:{{ .Major }}.{{ .Minor }}
+  image_templates:
+  - "msvechla/vaultbot:{{ .Version }}-amd64"
+  - "msvechla/vaultbot:{{ .Version }}-arm64"
+- name_template: msvechla/vaultbot:latest
+  image_templates:
+  - "msvechla/vaultbot:{{ .Version }}-amd64"
+  - "msvechla/vaultbot:{{ .Version }}-arm64"
+release:
+  gitlab:
+    owner: ""
+    name: "{{.Env.CI_PROJECT_ID}}"
+  disable: false
+nfpms:
+- maintainer: Marius Svechla
+  description: "Lightweight Hashicorp Vault PKI client, built for infrastructure automation. Automatically request and renew certificates generated inside vault via the PKI backend."
+  homepage: https://gitlab.com/msvechla/vaultbot
+  license: MIT
+  dependencies:
+    - libc6
+  overrides:
+    rpm:
+      dependencies:
+        - glibc
+  contents:
+    - dst: /etc/vaultbot
+      type: dir
+    - src: contrib/etc/systemd/system/vaultbot@.service
+      dst: /etc/systemd/system/vaultbot@.service
+      file_info:
+        mode: 0644
+    - src: contrib/etc/systemd/system/vaultbot@.timer
+      dst: /etc/systemd/system/vaultbot@.timer
+      file_info:
+        mode: 0644
+    - src: contrib/etc/vaultbot/vaultbot.conf
+      dst: /etc/vaultbot/vaultbot.conf
+      file_info:
+        mode: 0644
+      type: config
+  rpm:
+    signature:
+      key_file: key.gpg
+  deb:
+    signature:
+      key_file: key.gpg
+  formats:
+  - deb
+  - rpm
+

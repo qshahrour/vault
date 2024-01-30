@@ -1,0 +1,122 @@
+image: docker:latest
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_BUILDKIT: 1
+  DOCKER_CLI_EXPERIMENTAL: enabled
+  BUILDX_URL: https://github.com/docker/buildx/releases/download/v0.4.1/buildx-v0.4.1.linux-amd64
+  BUILDX_PLATFORM: linux/arm64/v8,linux/amd64
+  GO_VERSION: "1.21"
+
+services:
+  - name: docker:dind
+    command: ["--experimental"]
+
+stages:
+ - test
+ - release
+
+lint:
+  image: registry.gitlab.com/gitlab-org/gitlab-build-images:golangci-lint-alpine
+  stage: test
+  script:
+    # Use default .golangci.yml file from the image if one is not present in the project root.
+    - '[ -e .golangci.yml ] || cp /golangci/.golangci.yml .'
+    # Write the code coverage report to gl-code-quality-report.json
+    # and print linting issues to stdout in the format: path/to/file:line description
+    # remove `--issues-exit-code 0` or set to non-zero to fail the job if linting issues are detected
+    - >
+      golangci-lint run
+      --issues-exit-code 0
+      --exclude 'Using the variable on range scope `tt` in function literal'
+      --out-format code-climate | tee gl-code-quality-report.json | jq -r '.[] | "\(.location.path):\(.location.lines.begin) \(.description)"'
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+    paths:
+      - gl-code-quality-report.json
+
+test:
+  stage: test
+  script:
+    - sh testdata/run.sh
+    - docker run --link vault --rm -v "$PWD":/usr/src/vaultbot -w /usr/src/vaultbot -e GO111MODULE=on golang:$GO_VERSION /bin/bash -c "go test -v ./... -coverprofile cp.out ./... && go tool cover -func cp.out"
+  artifacts:
+    paths:
+      - testoutput
+    when: on_failure
+
+image-scan:
+  image:
+    name: snyk/snyk-cli:1.1179.0-docker
+    entrypoint: [""]
+  stage: test
+  services:
+    - docker:dind
+  script:
+    - touch vaultbot # dummy binary for docker scan
+    - snyk auth $SNYK_TOKEN
+    - docker build -t msvechla/vaultbot:${CI_COMMIT_SHORT_SHA} .
+    - snyk test --docker msvechla/vaultbot:${CI_COMMIT_SHORT_SHA} --file=Dockerfile
+  allow_failure: true
+
+dependency-scan:
+  image:
+    name: snyk/snyk:golang-1.21
+    entrypoint: [""]
+  stage: test
+  services:
+    - docker:dind
+  script:
+    - snyk auth $SNYK_TOKEN
+    - snyk test --file=go.mod
+  allow_failure: true
+
+semantic-release:
+  stage: release
+  image: node:21
+  before_script:
+    - npm install
+  script:
+    - npx semantic-release
+  only:
+    - master
+
+release:
+  stage: release
+  image: docker:stable
+  before_script:
+    - mkdir -p $HOME/.docker/cli-plugins/
+    - wget -O $HOME/.docker/cli-plugins/docker-buildx $BUILDX_URL
+    - chmod a+x $HOME/.docker/cli-plugins/docker-buildx
+    - "echo -e '{\n  \"experimental\": \"enabled\"\n}' | tee $HOME/.docker/config.json"
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    - docker buildx create --use --driver docker-container --name multiarch --platform=${BUILDX_PLATFORM}
+    - echo "$GPG_PRIVATE_KEY" > key.gpg
+  services:
+    - docker:dind
+
+  variables:
+    DOCKER_REGISTRY: https://index.docker.io/v1/
+    DOCKER_USERNAME: msvechla
+
+    # Disable shallow cloning so that goreleaser can diff between tags to
+    # generate a changelog.
+    GIT_DEPTH: 0
+
+  script: |
+    rm -f gl-code-quality-report.json
+    ls -l
+    docker buildx build --help
+    docker run --rm --privileged \
+      -v $PWD:/go/src/gitlab.com/msvechla/vaultbot \
+      -w /go/src/gitlab.com/msvechla/vaultbot \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -e DOCKER_USERNAME -e DOCKER_PASSWORD -e DOCKER_REGISTRY  \
+      -e GITLAB_TOKEN \
+      -e CI_PROJECT_ID \
+      goreleaser/goreleaser:v1.18.2 release --clean
+  only:
+    - tags
+

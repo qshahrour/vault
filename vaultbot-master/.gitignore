@@ -1,0 +1,10 @@
+.DS_Store
+*.pem
+vaultbot
+!vaultbot/
+cp.out
+testoutput/*
+
+vaultbot\.exe
+key.gpg
+key.gpg.bak

@@ -1,0 +1,9 @@
+[Unit]
+Description=Vaultbot cert renewal - %i
+
+[Service]
+EnvironmentFile=-/etc/vaultbot/vaultbot.conf
+EnvironmentFile=-/etc/vaultbot/vaultbot-%i.conf
+SyslogIdentifier=vaultbot-%i
+Type=oneshot
+ExecStart=/usr/local/bin/vaultbot
